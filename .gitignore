@@ -1,0 +1,12 @@
+# Python virtual environment
+.venv/
+__pycache__/
+*.py[cod]
+
+# CUDA / C++ build artifacts
+*.exe
+*.obj
+*.o
+*.exp
+*.lib
+*.pdb
