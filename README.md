@@ -84,3 +84,5 @@ pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu1
   exercises follow along with.
 - [CUDA Series: Streams and Synchronization](https://medium.com/@dmitrijtichonov/cuda-series-streams-and-synchronization-873a3d6c22f4)
   — Dmitrij Tichonov's write-up on CUDA streams and synchronization.
+
+- [https://maharshi.bearblog.dev/optimizing-softmax-cuda/]
