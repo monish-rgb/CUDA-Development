@@ -12,44 +12,10 @@
 #define SOFTMAX_BLOCK 256   // 1D block size for the row-wise softmax pass
 #define dim_head  64
 
-// Row-wise softmax kernel shared from softmax.cuh (must define SOFTMAX_BLOCK first)
+// Attention kernels (attention, attention_values) shared from attention.cuh.
+// Softmax kernel shared from softmax.cuh (must define SOFTMAX_BLOCK / dim_head first).
+#include "attention.cuh"
 #include "softmax.cuh"
-
-
-// CUDA kernel for Q*K^T
-__global__ void attention(float *Q, float *Key, float *C, int m, int k, int n) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    float scale = 1.0f / sqrtf((float)dim_head); // Scale factor for attention
-
-    if (row < m && col < n) {
-        float sum = 0.0f;
-        for (int l = 0; l < k; l++) {
-            sum += Q[row * k + l] * Key[col * k + l]; // Access Key in column-major order
-        }
-        C[row * n + col] = sum * scale;
-    }
-    // Note: The above kernel computes the attention scores by performing the matrix multiplication of Q and Key^T, and then scales the result.
-
-
-}
-
-// CUDA kernel for the value projection: O = C * V
-//   C (attention weights): m x n     V: n x p     O (output): m x p
-// Each thread computes one O[row][col] as a dot product over the n values.
-__global__ void attention_values(float *C, float *V, float *O, int m, int n, int p) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (row < m && col < p) {
-        float sum = 0.0f;
-        for (int l = 0; l < n; l++) {
-            sum += C[row * n + l] * V[l * p + col];
-        }
-        O[row * p + col] = sum;
-    }
-}
 
 // Initialize matrix with random values
 void init_matrix(float *mat, int rows, int cols) {
