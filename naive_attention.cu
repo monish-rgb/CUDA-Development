@@ -35,6 +35,22 @@ __global__ void attention(float *Q, float *Key, float *C, int m, int k, int n) {
 
 }
 
+// CUDA kernel for the value projection: O = C * V
+//   C (attention weights): m x n     V: n x p     O (output): m x p
+// Each thread computes one O[row][col] as a dot product over the n values.
+__global__ void attention_values(float *C, float *V, float *O, int m, int n, int p) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < m && col < p) {
+        float sum = 0.0f;
+        for (int l = 0; l < n; l++) {
+            sum += C[row * n + l] * V[l * p + col];
+        }
+        O[row * p + col] = sum;
+    }
+}
+
 // Initialize matrix with random values
 void init_matrix(float *mat, int rows, int cols) {
     for (int i = 0; i < rows * cols; i++) {
@@ -50,11 +66,12 @@ double get_time() {
 
 int main() {
     float *h_A, *h_B, *h_C_cpu, *h_C_gpu, *h_V;
-    float *d_A, *d_B, *d_C, *d_V;
+    float *d_A, *d_B, *d_C, *d_V, *d_O;
     int size_A = M * K * sizeof(float);
     int size_B = K * N * sizeof(float);
     int size_C = M * N * sizeof(float);
     int size_V = M * N * sizeof(float);
+    int size_O = M * N * sizeof(float);   // O = C * V, with V treated as N x N
 
     // Allocate host memory
     h_A = (float*)malloc(size_A);
@@ -74,6 +91,7 @@ int main() {
     cudaMalloc(&d_B, size_B);
     cudaMalloc(&d_C, size_C);
     cudaMalloc(&d_V, size_V);
+    cudaMalloc(&d_O, size_O);
 
     // Copy data to device
     cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice);
@@ -88,6 +106,7 @@ int main() {
     printf("Performing warm-up runs...\n");
     attention<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);   // scaled QKᵀ -> C
     softmax<<<M, SOFTMAX_BLOCK>>>(d_C, d_C, M, N);              // row-wise softmax, in place
+    attention_values<<<gridDim, blockDim>>>(d_C, d_V, d_O, M, N, N); // O = weights * V
     cudaDeviceSynchronize();
 
     // Benchmark GPU implementation
@@ -97,6 +116,7 @@ int main() {
         double start_time = get_time();
         attention<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);   // scaled QKᵀ -> C
         softmax<<<M, SOFTMAX_BLOCK>>>(d_C, d_C, M, N);              // row-wise softmax, in place
+        attention_values<<<gridDim, blockDim>>>(d_C, d_V, d_O, M, N, N); // O = weights * V
         cudaDeviceSynchronize();
         double end_time = get_time();
         gpu_total_time += end_time - start_time;
@@ -116,6 +136,7 @@ int main() {
     cudaFree(d_B);
     cudaFree(d_C);
     cudaFree(d_V);
+    cudaFree(d_O);
 
     return 0;
 }
